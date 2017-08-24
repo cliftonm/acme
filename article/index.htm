@@ -1,0 +1,454 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Language" content="en-us">
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>The Goal</title>
+</head>
+
+<body>
+
+<img border="0" src="ui5.png" width="527" height="661">
+<h2>The Goal</h2>
+<p>My personal goal with what I present in this article was to achieve the 
+ability to self-host multiple HTTPS websites that, while in the prototype stage, 
+are still usable by others, thus I want an Internet presence for these sites, 
+but without having to pay for hosting and certificates.</p>
+<h3>Eliminating Cost</h3>
+<p>This was the first issue I wanted to confront.&nbsp; I'm currently paying 
+$60/mo for a couple minimum tier Amazon EC2 instances, and, while a single SSL 
+certificate for one year from places like SSL.com, GeoTrust, GoDaddy, and Comodo 
+range from $17 to $69 per year, when I've got 5 or so sites I want to self-host, 
+that adds up pretty quickly.&nbsp; Keep in mind I'm already paying $130/mo for 
+broadband access through my cable provider.&nbsp; So, the two issues involving 
+eliminating cost are:</p>
+<ol>
+	<li>Not paying for hosting.</li>
+	<li>Not paying for SSL certificates.</li>
+</ol>
+<h4>Caveats</h4>
+<p>Before hosting your own server, review the contract with your provider.&nbsp; 
+For example, Verizon FiOS specifically forbid hosting servers unless you get 
+their business service.&nbsp; While my cable provider has a business plans, I 
+don't see anything in my contract that prevents me from hosting my own web 
+sites.</p>
+<p>Another problem is, do you have a static public IP?&nbsp; If not, then 
+hosting your own websites is just not going to happen unless you use a service 
+like <a href="https://www.noip.com/">noip.com</a> or
+<a href="https://www.duckdns.org/">duckdns.org</a>, both use subdomains so your 
+URL would be [yourname].no-ip.org or [yourname].duckdns.org, neither of which is 
+desirable.&nbsp; Removing the no-ip.org, you guessed it, costs money!</p>
+<h3>Better Hardware</h3>
+<p>Unless you go for dedicated hardware (which at one point I was paying $100/mo 
+for, and still even then the equipment was pretty low end), hosting is done on 
+VM's and the minimum tier at, for example, Amazon, is pretty minimum - 30GB disk 
+space, 1GB RAM.&nbsp; This gets eaten up pretty quickly by the OS itself, SQL 
+Server, and email server, etc.&nbsp; I've got several laptops and desktops lying 
+around that have much better specs and are, well, just sitting around.</p>
+<h4>Caveats</h4>
+<p>A hosting provider should provide backups of your VM, automatically handle 
+physical equipment failures, and other benefits.&nbsp; Given that these are 
+prototype websites, this is not at the top of my priority list and can be 
+handled by other means.&nbsp; Of course, the fact that a truck came by and 
+somehow snagged the cable running from the pole across the street and completely 
+ripped off the cable, resulting in 5 days of downtime, well, that kind of outage 
+is definitely a factor!&nbsp; And of course, there's having redundant equipment 
+in case of a hardware failure, power outages to deal with, cats chewing on 
+cables, and other issues that a host provider handles (usually) for you.</p>
+<h3>Simplicity and Control</h3>
+<p>I like to be in control (which is why I don't like flying) and I like the 
+ease of updating a site when the site is running locally, rather than having to 
+go through a publishing utility, FTP, or other remote deployment mechanism.&nbsp; 
+As silly as it sounds, &quot;copy and paste&quot; of the web app (and I have automated 
+tools to do that) just make life simpler.&nbsp; Yes, the one-click &quot;Publish&quot; 
+feature is Visual Studio is pretty simple, but sometimes I just need to run a 
+migration on the DB, make a simple tweak to a web page, or want to set up a beta 
+test site without having to go through the whole process of creating another VM 
+on the host provider.&nbsp; </p>
+<h4>Caveats</h4>
+<p>Non-standard publishing processes, possibly more error prone, more local 
+tooling.</p>
+<h2>Problem #1: Running Multiple HTTPS Websites</h2>
+<p>It's relatively easy to host one website, though it can be a bit tricky 
+getting:</p>
+<pre>netsh http add sslcert ipport=0.0.0.0:443 certstorename=Root certhash=[hash] 
+appid={[some GUID]} </pre>
+<p>to work.&nbsp; The most annoying problem is when you copy and paste the hash, 
+that you aren't pasting hidden characters, which is a common problem.</p>
+<p>The problem is, using netsh, you can only associate one certificate to port 
+443.&nbsp; And since:</p>
+<ol>
+	<li>The certificate is associated with the domain name;</li>
+<li>The certificate is validated (the handshake process) against traffic coming 
+in on the port rather than being qualified by the domain name;</li>
+	<li>Getting a certificate that can be applied to multiple domain names is 
+	prohibitively expensive;</li>
+</ol>
+<p>this is not a usable solution.&nbsp; Being a late adopter, I quickly discovered that, on Windows 7, 
+hosting multiple HTTPS websites on IIS is also not possible.</p>
+<h3>The Solution: Server Name Indication and IIS 8 or Higher</h3>
+<p>The solution is to use 
+<a href="https://en.wikipedia.org/wiki/Server_Name_Indication">Server Name 
+Indication</a>: </p>
+<p><i>Server Name Indication (SNI) is an extension to the TLS computer 
+networking protocol by which a client indicates which hostname it is attempting 
+to connect to at the start of the handshaking process. This allows a server to 
+present multiple certificates on the same IP address and TCP port number and 
+hence allows multiple secure (HTTPS) websites (or any other Service over TLS) to 
+be served by the same IP address without requiring all those sites to use the 
+same certificate. It is the conceptual equivalent to HTTP/1.1 name-based virtual 
+hosting, but for HTTPS. The desired hostname is not encrypted, so an 
+eavesdropper can see which site is being requested.</i></p>
+<p>SNI is supported by IIS version 8 and higher:</p>
+<p><img border="0" src="sni.png" width="527" height="315"></p>
+<p>which meant finally biting the bullet and upgrading to Windows 10.</p>
+<h2>Problem #2: Free SSL Certificates</h2>
+<p>There are several free SSL certificate providers: letsencrypt, comodo, 
+sslforfree, etc.&nbsp; These provide basic SSL certificates, but they typically 
+expire every 90 days.&nbsp; LetsEncrypt uses the
+<a href="https://en.wikipedia.org/wiki/Automated_Certificate_Management_Environment">
+Automated Certificate Management Environment</a> protocol:</p>
+<p><i>...for automating interactions between certificate authorities and their 
+users' web servers, allowing the automated deployment of public key 
+infrastructure at very low cost. It was designed by the Internet Security 
+Research Group (ISRG) for their Let's Encrypt service.&nbsp; The protocol, based 
+on passing JSON-formatted messages over HTTPS, has been published as an Internet 
+Draft by its own chartered IETF working group.</i></p>
+<p>InstantSsl (Comodo) requires that you generate a CSR and install the 
+certificate.</p>
+<p>Conversely, using ACME requires setting up a handler for the &quot;ACME 
+challenge&quot;, which is a GET request sent over HTTP to your domain on a specific 
+path <code>/.well-known/acme-challenge</code> which requires that you respond 
+with the challenge token provided by a handshake process with LetsEncrypt.</p>
+<h3>Caveats</h3>
+<p>As F-ES Sitecore pointed out
+<a href="https://www.codeproject.com/Lounge.aspx?msg=5411167#xx5411167xx">here 
+on CP</a>:</p>
+<p><i>LetsEncrypt has issued certs to over 10,000 PayPal phishing sites and 
+security experts say it is ruining HTTPS as it removes the trustworthiness of 
+https leaving people more vulnerable to attacks.</i></p>
+<p>A quick search came up with
+<a href="https://www.bleepingcomputer.com/news/security/14-766-lets-encrypt-ssl-certificates-issued-to-paypal-phishing-sites/">
+this security news blurb</a>:</p>
+<p><i>During the past year, Let's Encrypt has issued a total of 15,270 SSL 
+certificates that contained the word &quot;PayPal&quot; in the domain name or the 
+certificate identity.&nbsp; Of these, approximately 14,766 (96.7%) were issued 
+for domains that hosted phishing sites, according to an analysis carried out on 
+a small sample of 1,000 domains, by Vincent Lynch, encryption expert for The SSL 
+Store.</i></p>
+<p>The point being, you may feel a bit queasy about using a service like 
+LetsEncrypt and indirectly supporting this kind of behavior by the less ethical 
+members of our digital community.</p>
+<h3>The Solution, Step 1: acme.net</h3>
+<p>There's a lot of tools out there (including
+<a href="https://www.codeproject.com/articles/1121941/using-let-s-encrypt-for-free-automated-ssl-certifi">
+this CP article</a>) for using LetsEncrypt on *nix systems (sort 
+of makes sense, right?)&nbsp; There are very few tools for integrating 
+LetsEncrypt with IIS.&nbsp; I ended up finding
+<a href="https://github.com/oocx/acme.net">this project</a> on GitHub, but the 
+problem was that the author was using xproj (which has &quot;<a href="http://www.talkingdotnet.com/bye-bye-project-json-xproj-welcome-back-csproj/">gone 
+away</a>&quot;) instead of csproj files.&nbsp; Looking at the forks of oocx's GitHub 
+repo, I discovered <a href="https://github.com/frankhommers/acme.net">
+frankhommers acme.net fork</a>, which uses csproj files.&nbsp; Yay!</p>
+<h3>The Solution, Step 2: Handling the ACME Challenge</h3>
+<p>The console app acme.net does all the handshaking with LetsEncrypt to obtain 
+a token and then (in manual mode) it waits for you to set up your server to 
+respond with the validation request that LetsEncrypt sends to your domain.&nbsp; 
+In automatic mode, it assumes that your server is set up to respond to any 
+challenge request LetsEncrypt sends.&nbsp; I wanted to use the second mode, to 
+automate the process as fully as possible.</p>
+<p>What acme.net creates for you is the file containing the full token with 
+which LetsEncrypt expects you to respond.&nbsp; Here's some example filenames 
+(every time you ask for an SSL certificate, LetsEncrypt uses a totally different 
+challenge token):</p>
+<p><img border="0" src="acme1.png" width="347" height="249"></p>
+<p>Just for giggles, let's look at the contents of the first file:</p>
+<p><img border="0" src="acme2.png" width="665" height="105"></p>
+<p>That's what LetsEncrypt expects you to respond with.&nbsp; When it makes the 
+GET request, the URL is appended with the everything to the left of the &quot;.&quot;, so 
+the URL path would look like (for this particular ACME challenge):</p>
+<p><code>/.well-known/acme-challenge/-1mU4FF8ssT3TyFrsPf1r0tZ0mzra1krIFz4sDbzTb8</code>&nbsp;</p>
+<p>The steps, therefore, to respond to the challenge automatically is:</p>
+<ol>
+	<li>Look for the starting URL path of <code>/.well-known/acme-challenge</code></li>
+	<li>Extract the partial token</li>
+	<li>Load the full token from the file of the same name</li>
+	<li>Send that as a text response to the GET request.</li>
+</ol>
+<p>A simple server to do this is:</p>
+<pre>using System;
+using System.IO;
+using System.Net;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace acme
+{
+  public class ServerExceptionEventArgs : EventArgs
+  {
+    public Exception Exception { get; set; }
+  }
+
+  public class AcmeChallengeServer
+  {
+    public event EventHandler&lt;ServerExceptionEventArgs&gt; ServerException;
+
+    protected bool running = true;
+    protected HttpListener listener;
+
+    public void Start(string localIP)
+    {
+      listener = new HttpListener();
+      listener.Prefixes.Add(&quot;http://&quot; + localIP + &quot;/&quot;);
+      listener.Start();
+      Task.Run(() =&gt; WaitForConnection(listener));
+    }
+
+    public void Stop()
+    {
+      running = false;
+      listener.Stop();
+    }
+
+    private void WaitForConnection(object objListener)
+    {
+      while (running)
+      {
+        HttpListenerContext context;
+
+        try
+        {
+          context = listener.GetContext();
+        }
+        catch (HttpListenerException)
+        {
+          // Occurs when we stop the listener.
+          break;
+        }
+        catch (Exception ex)
+        {
+          ServerException?.Invoke(this, new ServerExceptionEventArgs() { Exception = ex });
+          // Other exceptions should be handled elsewhere.
+          break;
+        }
+
+        if (context.Request.RawUrl.StartsWith(&quot;/.well-known/acme-challenge&quot;))
+        {
+          string challengeFile = context.Request.RawUrl.RightOfRightmostOf('/');
+
+          if (File.Exists(challengeFile))
+          {
+            string data = File.ReadAllText(challengeFile);
+
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = &quot;text/text&quot;;
+            context.Response.ContentEncoding = Encoding.UTF8;
+
+            byte[] byteData = Encoding.ASCII.GetBytes(data);
+            context.Response.ContentLength64 = byteData.Length;
+            context.Response.OutputStream.Write(byteData, 0, byteData.Length);
+          }
+        }
+
+        context.Response.Close();
+      }
+    }
+  }
+}</pre>
+<h4>Why This Works</h4>
+<p>For several reasons:</p>
+<ol>
+	<li>The challenge is sent to <a href="http://[yourdomain">http://[yourdomain</a>], 
+	so to receive the challenge, the domain be pointed to your public IP.</li>
+<li>Granted, anyone can append some random partial token to <code>
+/.well-known/acme-challenge/</code>, but if you don't have a matching challenge 
+file created by acme.net with the full token, then you know someone is doing 
+something nefarious.&nbsp; Black list them!</li>
+	<li>And so what?&nbsp; Even if they get the full token of the challenge 
+	response, it doesn't relate at all to your certificate, it merely 
+	authenticated your server as the one for which LetsEncrypt will generate an 
+	SSL certificate.&nbsp; Once authenticated, LetsEncrypt will send to acme.net 
+	the pfx file containing your certificate.</li>
+</ol>
+<h4>Other Tools</h4>
+<p>While I'm on the subject of acme.net, Rick Strahl discusses some other tools 
+for handling the ACME challenge on
+<a href="https://weblog.west-wind.com/posts/2016/feb/22/using-lets-encrypt-with-iis-on-windows">
+his blog</a>.&nbsp; Personally, I think the UI app I present here is by far the 
+simplest and most flexible, but that's my not so humble opinion.</p>
+<h2>Problem #3: Automating the Process</h2>
+<p>I want to be able to register certificates in either IIS or, if I'm running a 
+single website and don't want to use IIS, using netsh.&nbsp; In fact, you can 
+still run one website with netsh port 443 binding, and other HTTPS websites in 
+IIS!&nbsp; To put all the pieces together, we need a workflow that does this:</p>
+<p><img border="0" src="workflow.png" width="505" height="381"></p>
+<h3>The Solution, Step 1: Calling acme.net</h3>
+<p>It was straight forward to launch acme.net as a process, except for this 
+line that hides the cursor:</p>
+<pre>private void GetPfxPasswordFromUser()
+{
+  System.Console.CursorVisible = false;</pre>
+<p>This throws an exception when launched in a windowless process, so the code 
+needed a minor tweak.&nbsp; Thank goodness for open source!</p>
+<p>There's a lot of parameters that need to be passed to acme.net, and a couple 
+depend on whether you're registering the certificate manually or using IIS.&nbsp; 
+This is handled by the front end with the following radio buttons:</p>
+<p><img border="0" src="ui1.png" width="290" height="57"></p>
+<p>&quot;Neither&quot; is an option if you just want the pfx file, but don't want to use 
+IIS or netsh binding.</p>
+<p>The comments describe the parameters I'm using.</p>
+<pre>private Process LaunchAcmeDotNet(string domainName, string certPassword)
+{
+  // -a: accept terms of service
+  // -j: accept instructions (since we're running a server that will accept the challenge
+  // -d: the domain
+  // -p: the password for the cert.
+  // -c: challenge provider (manual, not iis)
+  // -i: server configuration provider (manual, not iis)
+  // -s: letsencrypt server. For staging server, use: <a href="https://acme-staging.api.letsencrypt.org">https://acme-staging.api.letsencrypt.org</a>
+
+  string staging = rbStaging.Checked ? &quot;-s https://acme-staging.api.letsencrypt.org &quot; : &quot;&quot;;
+  string manualOptions = &quot;-c manual-http-01 -i manual&quot;; // challenge is handled by our micro server, not IIS, and manaul configuration of certificate
+  string iisOptions = &quot;-c manual-http-01 -i iis&quot;; // challenge is handled by our micro server but cert is installed and configured in IIS
+  string options = rbIIS.Checked ? iisOptions : manualOptions;
+  Process p = Helpers.LaunchProcess(@&quot;acme.net\acme.exe&quot;, String.Format(staging + &quot;-a -j -d {0} -p {1} {2}&quot;, domainName, certPassword, options),
+  stdout =&gt; this.Invoke(() =&gt; tbLog.AppendText(stdout + CRLF)),
+  stderr =&gt; this.Invoke(() =&gt; tbLog.AppendText(stderr + CRLF)));
+
+  return p;
+}</pre>
+<p>For simplicity, and particularly because it's a bit of a cart before the 
+horse problem when registering a certificate to IIS for a server that isn't 
+running yet because the IIS server is only listening to port 80, I'm using the 
+little mini-server described above for the ACME challenge in both netsh and IIS 
+registration.</p>
+<h3>The Solution, Step 2: Testing - Production vs. Staging</h3>
+<p><img border="0" src="ui2.png" width="286" height="59"></p>
+<p>LetsEncrypt doesn't like it if you hit their production server too often for 
+a new certificate, so they have provided a staging server that you can use for 
+testing.&nbsp; Use it!&nbsp; I found that I had to do a lot of complete workflow 
+testing to get everything right.&nbsp; This is handled in the code above and is 
+exposed to you in the UI, as shown.</p>
+<h3>The Solution, Step 3: netsh</h3>
+<p>The acme.net handles IIS binding for you, but to do netsh binding requires 
+programmatically importing the certificate and making a call to netsh.</p>
+<h4>netsh: Programmatically Importing the Certificate</h4>
+<p>Easy, but if you look at all the code I commented out, you can see the 
+various rabbit holes that I went down, such as importing the the certificate 
+into the &quot;My&quot; store, exporting it, doing a repair, re-importing it.&nbsp; Turns 
+out all that isn't necessary, but at one point it seemed necessary as I was 
+debugging the whole process.&nbsp; And getting these flags right was a process 
+of trial and error!</p>
+<pre>static string ImportCert(StoreName storeName, string certFile, string password, out string certHash)
+{
+  // Must specify MachineKeySet otherwise you'll get a &quot;SSL Certificate add failed, Error 1312&quot; error.
+
+  X509Certificate2 certToImport = new X509Certificate2(certFile, password, 
+    X509KeyStorageFlags.Exportable | X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet);
+  X509Store store = new X509Store(storeName, StoreLocation.LocalMachine);
+  store.Open(OpenFlags.MaxAllowed);
+  store.Add(certToImport);
+  store.Close();
+
+  certHash = certToImport.Thumbprint;
+
+  return certToImport.SerialNumber;
+}</pre>
+<h4>netsh: Binding</h4>
+<p>Binding the certificate to port 443 is also straight forward (as long as you 
+don't get the dreaded &quot;Error 1312&quot;!)</p>
+<pre>static void RemoveBinding(Action&lt;string&gt; log)
+{
+  // netsh http delete sslcert ipport=0.0.0.0:443
+  Process p = Helpers.LaunchProcess(&quot;netsh&quot;, &quot;http delete sslcert ipport=0.0.0.0:443&quot;,
+  (stdout) =&gt; log(stdout),
+  (stderr) =&gt; log(stderr));
+
+  p.WaitForExit();
+}
+
+static void AddNewBinding(string certHash, Guid appId, Action&lt;string&gt; log)
+{
+  // netsh http add sslcert ipport=0.0.0.0:443 certstorename=Root certhash=[] appid={}
+  // Why root?
+  // https://stackoverflow.com/questions/13076915/ssl-certificate-add-failed-when-binding-to-port/19766650#19766650 (see Fredy Wenger's response)
+  Process p = Helpers.LaunchProcess(&quot;netsh&quot;, &quot;http add sslcert ipport=0.0.0.0:443 certstorename=Root certhash=&quot; + certHash + &quot; appid={&quot; + appId.ToString() + &quot;}&quot;,
+  (stdout) =&gt; log(stdout),
+  (stderr) =&gt; log(stderr));
+
+  p.WaitForExit();
+}</pre>
+<p>Again, note the code comments, particularly in the add binding.</p>
+<h4>Cleaning up the old Certificate(s)</h4>
+<p>Something I notice that doesn't happen when binding to IIS is that acme.net 
+doesn't remove the old certificate.&nbsp; In my implementation, I clean up the 
+certificates before getting a new certificate.&nbsp; <b><font color="#FF0000">CAUTION!</font></b>&nbsp; If an error 
+occurs, or your site has constant traffic, removing the old certificate before 
+the new one is successfully installed can result in your user experiencing 
+certificate errors!</p>
+<pre>public static void RemoveCert(StoreName storeName, string subjectName)
+{
+  // <a href="http://stackoverflow.com/questions/7632757/how-to-remove-certificate-from-store-cleanly">http://stackoverflow.com/questions/7632757/how-to-remove-certificate-from-store-cleanly</a>
+  X509Store store = new X509Store(storeName, StoreLocation.LocalMachine);
+  store.Open(OpenFlags.ReadWrite | OpenFlags.IncludeArchived);
+  X509Certificate2Collection certCollection = store.Certificates.Find(X509FindType.FindBySubjectName, subjectName, false);
+
+  foreach(var cert in certCollection)
+  {
+    store.Remove(certCollection[0]);
+  }
+
+  store.Close();
+}</pre>
+<h3>The Solution, Step 4: When Do My Certificates Expire?</h3>
+<p><img border="0" src="ui3.png" width="425" height="134"></p>
+<p>(There's a couple sites that I don't want publicly known that are related to 
+some client work.)</p>
+<p>It's also helpful to know when your certificates are going to expire.&nbsp; 
+One useful thing to do in the future would be to set up a service that 
+automatically renews the certificates that are, say, within 15 days of expiring, 
+but that's beyond the scope of this article.</p>
+<pre>protected void GetCertificatesIn(StoreName storeName, List&lt;CertificateExpiration&gt; certs)
+{
+  X509Store store = new X509Store(storeName, StoreLocation.LocalMachine);
+  store.Open(OpenFlags.OpenExistingOnly);
+
+  foreach (var cert in store.Certificates)
+  {
+    if (cert.Issuer.Contains(&quot;Let's Encrypt Authority&quot;))
+    {
+      certs.Add(new CertificateExpiration()
+      {
+        Subject = cert.Subject.RightOf(&quot;CN=&quot;),
+        ExpirationDate = cert.NotAfter,
+      });
+    }
+  }
+
+  store.Close();
+}</pre>
+<p>Some fancy formatting for the above textbox (it helps if you assign a 
+monospace font like Consolas to the textbox):</p>
+<pre>var certExpDates = GetCertificateExpirationDates();
+int maxSubjectLength = certExpDates.Max(c =&gt; c.Subject.Length);
+tbExpirationDates.AppendText(
+  String.Join(
+   CRLF, 
+   certExpDates.OrderBy(c =&gt; c.ExpirationDate).
+   Select(c =&gt; c.Subject.PadRight(maxSubjectLength) + &quot; : &quot; + c.ExpirationDate)));</pre>
+<h2>Problem #4: I Dislike the Command Line</h2>
+<p>As you've probably guessed at this point, I'm UI guy, not a command line / script / powershell guy.&nbsp; </p>
+<h3>Solution</h3>
+<p>So the whole thing is packaged in a nice UI:</p>
+<p><img border="0" src="ui4.png" width="523" height="401"></p>
+<p>Besides showing you some useful information like your local and public IP 
+addresses, it's very simple to enter your domain name and certificate password.</p>
+<h2>Conclusion</h2>
+<p>One thing to mention -- you have to run the application as an administrator!&nbsp; 
+Otherwise, enjoy using LetsEncrypt and multiple website hosting with IIS!</p>
+<p>Also, the executable includes the binaries for acme.net (modified as 
+described earlier) so you don't need to download that app separately.</p>
+
+</body>
+
+</html>
